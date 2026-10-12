@@ -74,7 +74,7 @@ object GoogleMapsNotificationParser {
 
         // Detect pictogram or retain last detected pictogram for ongoing maneuver distance updates
         val detected = detectPictogram(fullContent)
-        val picto = if (detected != Pictogram.STRAIGHT) {
+        val picto = if (detected != Pictogram.OFF) {
             lastDetectedPictogram = detected
             detected
         } else {
@@ -146,17 +146,19 @@ object GoogleMapsNotificationParser {
     }
 
     private fun detectPictogram(text: String): Pictogram {
+        val lower = text.lowercase(Locale.ROOT)
         return when {
-            text.contains("u-turn") || text.contains("make a u turn") || text.contains("uturn") || text.contains("turn around") -> Pictogram.U_TURN
-            text.contains("sharp right") -> Pictogram.SHARP_RIGHT
-            text.contains("sharp left") -> Pictogram.SHARP_LEFT
-            text.contains("slight right") || text.contains("bear right") || text.contains("fork right") -> Pictogram.SLIGHT_RIGHT
-            text.contains("slight left") || text.contains("bear left") || text.contains("fork left") -> Pictogram.SLIGHT_LEFT
-            text.contains("turn right") || text.contains("take a right") || text.contains("keep right") || text.contains("right") -> Pictogram.TURN_RIGHT
-            text.contains("turn left") || text.contains("take a left") || text.contains("keep left") || text.contains("left") -> Pictogram.TURN_LEFT
-            text.contains("roundabout") || text.contains("rotary") -> Pictogram.ROUNDABOUT
-            text.contains("destination") || text.contains("arrived") || text.contains("reached") -> Pictogram.ARRIVED
-            else -> Pictogram.STRAIGHT
+            lower.contains("u-turn") || lower.contains("make a u turn") || lower.contains("uturn") || lower.contains("turn around") -> Pictogram.U_TURN
+            lower.contains("sharp right") -> Pictogram.SHARP_RIGHT
+            lower.contains("sharp left") -> Pictogram.SHARP_LEFT
+            lower.contains("slight right") || lower.contains("bear right") || lower.contains("fork right") -> Pictogram.SLIGHT_RIGHT
+            lower.contains("slight left") || lower.contains("bear left") || lower.contains("fork left") -> Pictogram.SLIGHT_LEFT
+            lower.contains("turn right") || lower.contains("take a right") || lower.contains("keep right") || lower.contains("right") -> Pictogram.TURN_RIGHT
+            lower.contains("turn left") || lower.contains("take a left") || lower.contains("keep left") || lower.contains("left") -> Pictogram.TURN_LEFT
+            lower.contains("roundabout") || lower.contains("rotary") -> Pictogram.ROUNDABOUT
+            lower.contains("destination") || lower.contains("arrived") || lower.contains("reached") -> Pictogram.ARRIVED
+            lower.contains("continue") || lower.contains("straight") || lower.contains("head north") || lower.contains("head south") || lower.contains("head east") || lower.contains("head west") -> Pictogram.STRAIGHT
+            else -> Pictogram.OFF
         }
     }
 

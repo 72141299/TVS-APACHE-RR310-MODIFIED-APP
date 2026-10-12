@@ -17,6 +17,7 @@ object TvsProtocol {
     const val START_BYTE_NAV: Byte = 0x5A.toByte()
     const val DATA_ID_NAV: Byte = 0x4E.toByte() // ASCII 'N'
     const val START_BYTE_TEXT: Byte = 0x5B.toByte() // ASCII '['
+    const val DATA_ID_TEXT: Byte = 0x53.toByte() // ASCII 'S'
     const val XOR_KEY: Byte = 0xEA.toByte()
 
     /**
@@ -33,6 +34,8 @@ object TvsProtocol {
      * 9  = U_TURN_LEFT
      * 10 = ROUNDABOUT
      * 11 = ROUNDABOUT_LEFT
+     * 12 = KEEP_RIGHT
+     * 13 = KEEP_LEFT
      * 14 = ARRIVED (Destination Reached / Flag)
      */
     enum class Pictogram(val code: Byte) {
@@ -48,13 +51,16 @@ object TvsProtocol {
         U_TURN_LEFT(9),
         ROUNDABOUT(10),
         ROUNDABOUT_LEFT(11),
-        ARRIVED(14),
-        KEEP_RIGHT(2),
-        KEEP_LEFT(5)
+        KEEP_RIGHT(12),
+        KEEP_LEFT(13),
+        ARRIVED(14)
     }
 
     /**
      * Builds the 20-byte turn-by-turn navigation frame.
+     *
+     * Bytes 2..8 (distance/time) are XOR encrypted with 0xEA.
+     * Bytes 9..17 (pictogram code, unit, etc.) are plain unencrypted bytes.
      */
     fun buildNavigationPacket(
         distanceMeters: Int,
@@ -66,8 +72,8 @@ object TvsProtocol {
     ): ByteArray {
         val raw = ByteArray(20)
 
-        raw[0] = START_BYTE_NAV
-        raw[1] = DATA_ID_NAV
+        raw[0] = START_BYTE_NAV // 0x5A
+        raw[1] = DATA_ID_NAV    // 0x4E ('N')
 
         // Distance to upcoming maneuver (clamp to 65535 meters)
         val distClamped = distanceMeters.coerceIn(0, 0xFFFF)
@@ -85,6 +91,12 @@ object TvsProtocol {
         raw[7] = ((remDistClamped shr 8) and 0xFF).toByte()
         raw[8] = (remDistClamped and 0xFF).toByte()
 
+        // XOR encrypt only distance/time bytes 2..8
+        for (i in 2..8) {
+            raw[i] = (raw[i].toInt() xor XOR_KEY.toInt()).toByte()
+        }
+
+        // Unencrypted pictogram code and metadata flags (bytes 9..17)
         raw[9] = pictogram.code
         raw[10] = 1.toByte() // String chunk count
         raw[11] = if (isRerouting) 1.toByte() else 0.toByte()
@@ -95,12 +107,7 @@ object TvsProtocol {
         raw[16] = 0.toByte()
         raw[17] = 0.toByte()
 
-        // 1. XOR encrypt payload bytes 2..17 with key 0xEA
-        for (i in 2..17) {
-            raw[i] = (raw[i].toInt() xor XOR_KEY.toInt()).toByte()
-        }
-
-        // 2. Calculate Checksum on encrypted payload bytes 0..17
+        // Checksum calculation on bytes 0..17
         var sum = 0
         for (i in 0..17) {
             sum += (raw[i].toInt() and 0xFF)
@@ -125,22 +132,23 @@ object TvsProtocol {
     }
 
     /**
-     * Builds the fixed 15-byte street name / custom text packet.
-     * Format: [0x5B] + [14 UTF-8 text bytes padded with spaces 0x20]
+     * Builds the 16-byte text packet [0x5B, 0x53, char1..char14].
+     * Format: [0x5B] + [0x53] + [14 UTF-8 text bytes padded with spaces 0x20]
      */
     fun buildStreetNamePacket(streetName: String): ByteArray {
-        val packet = ByteArray(15)
-        packet[0] = START_BYTE_TEXT // 0x5B
+        val packet = ByteArray(16)
+        packet[0] = START_BYTE_TEXT // 0x5B ('[')
+        packet[1] = DATA_ID_TEXT    // 0x53 ('S')
 
-        // Pad with space (0x20)
-        for (i in 1..14) {
+        // Pad text payload bytes 2..15 with space (0x20)
+        for (i in 2..15) {
             packet[i] = 0x20.toByte()
         }
 
         val trimmed = if (streetName.length > 14) streetName.substring(0, 14) else streetName
         val textBytes = trimmed.toByteArray(StandardCharsets.UTF_8)
         val copyLen = textBytes.size.coerceAtMost(14)
-        System.arraycopy(textBytes, 0, packet, 1, copyLen)
+        System.arraycopy(textBytes, 0, packet, 2, copyLen)
 
         return packet
     }
